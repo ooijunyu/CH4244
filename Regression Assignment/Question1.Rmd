@@ -1,18 +1,25 @@
 ---
 title: "R Notebook"
-output: html_notebook
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
 ---
 
-* Question 1
+# Question 1
 
-** Importing necessary library
+## Importing necessary library
 
 ```{r}
 library(tidyverse)
 library(car)
 library(caret)
 library(scatterplot3d)
+library(factoextra)
 ```
+
+## Importing data
 
 First, the data set is imported into the notebook.
 
@@ -20,6 +27,8 @@ First, the data set is imported into the notebook.
 data <- read_csv("Advertising.csv")
 attach(data)
 ```
+
+## Data inspection
 
 Then we have a quick inspect in the data set.
 
@@ -36,7 +45,6 @@ hist(TV,breaks = seq(0,300,30))
 hist(radio)
 hist(newspaper)
 hist(Sales)
-?hist
 ```
 
 The spread of data in `TV` seems to be even. However, in `radio` and `newspaper`, there are higher frequency of lower value investment with `newspaper` having a more obvious trend. From the histogram, we observed that `Sales` are roughly normally distributed with slight skewed to the right.
@@ -49,6 +57,8 @@ plot(TV, Sales, main = "Sales vs TV")
 plot(radio, Sales, main = "Sales vs radio")
 plot(newspaper, Sales, main = "Sales vs newspaper")
 ```
+
+## Data pre-processing
 
 Now we randomly shuffle the data.
 
@@ -70,6 +80,10 @@ cor(select(data,-rand))
 ```
 
 From the correlation matrix, we can see that `Sales` is highly correlated to `TV` and `Radio` with $r = 0.782$ and $r = 0.576$ respectively, while `Sales` is weakly correlated with `Newspaper` with $r = 0.228$. Do note that the predictors `Radio` and `Newspaper` are correlated to each other with $r = 0.354$. Hence, we expect only one of either will make a good predictor.
+
+## Repeated K-fold Cross Validation
+
+### All predictors
 
 Now we will use repeated K-fold cross validation (K = 10) and fit with a linear regression $\hat{Sales}=\beta_0+\beta_1\cdot\sqrt{TV}+\beta_2\cdot radio+\beta_3\cdot newspaper$
 
@@ -101,6 +115,8 @@ vif(model1$finalModel)
 ```
 
 From the VIF generated, the $VIF_{\sqrt{TV}}\approx1$, $VIF_{radio}=1.14$ and $VIF_{newspaper}=1.14$ shows that there is some collinearity between the predictors `radio` and `newspaper`.
+
+### Without newspaper
 
 Next we try to train the model without the predictor `newspaper`.
 
@@ -148,6 +164,8 @@ s3d$plane3d(model2$finalModel)
 
 We can see that at the extreme value(pure input) of either `radio` or `sqrt(TV)`, the model underestimate the data, while when there is a mixed input from both predictors, the model overestimate the data. It clearly shows that there are some synergy or interaction between the 2 predictors term. Hence, we will fit again a model with interaction term between the 2 predictors.
 
+### Adding interaction variables
+
 $\hat{Sales}=\beta_0+\beta_1\cdot\sqrt{TV}+\beta_2\cdot radio+\beta_3\cdot\sqrt{TV}\times radio$
 
 ```{r}
@@ -178,8 +196,58 @@ plot(model3$finalModel)
 
 Now we can see that the residuals are roughly randomly distributed across the 0 abline.
 
+## Principal Component Analysis
 
+Now we are going to do Principle Component Analysis(PCA) with a variance threshold of 95% and plot out the scree plot.
 
+There are 2 methods for PCA - spectral decomposition and singular value decomposition. We will try both methods and compare the results
+
+```{r}
+# PCA spectral decomposition method
+pca.spectral <- princomp(select(data,TV,radio,newspaper))
+summary(pca.spectral)
+
+# Scree plot
+fviz_eig(pca.spectral)
+
+# Obtaining the eigenvalues and var explained
+get_eig(pca.spectral)
+
+# The contributions of each features in each component 
+pca.spectral.var <- get_pca_var(pca.spectral)
+print(round(pca.spectral.var$contrib,5))
+
+# The coefficients of each features in each component
+pca.spectral$loadings
+```
+
+With the spectral decomposition approach, we can see that the 1st component represents roughly 91.4% of the variance, 2nd component represents roughly 6.4% of the the variance, and the 3rd component represents roughly 2.2% of the variance. Hence, with a variance threshold of 95%, 2 components will be selected, and roughly 97.8% of the variance are explained by the 2 components.
+
+Next is the PCA with SVD method.
+
+```{r}
+# PCA SVD method
+pca.svd <- prcomp(select(data,TV,radio,newspaper), 
+                         scale. = TRUE, center = TRUE)
+summary(pca.svd)
+
+# Scree plot
+fviz_eig(pca.svd)
+
+# Obtaining the eigenvalues and var explained
+get_eig(pca.svd)
+
+# The contribution of each features in each component 
+pca.svd.var <- get_pca_var(pca.svd)
+print(round(pca.spectral.var$contrib,5))
+
+# The coefficients of each features in each component
+pca.svd$rotation
+```
+
+However, with the singular value decomposition approach, we can see that the 1st component represents roughly 45.7% of the variance, 2nd component represents roughly 32.8% of the the variance, and the 3rd component represents roughly 21.5% of the variance. Hence, with a variance threshold of 95%, all components will be selected, and 100% of the variance are explained by the 3 components.
+
+__Note:__ When I compare my result with my friends that compute using MATLAB, I realise that MATLAB is using Spectral Decomposition method, where 2 components will be selected with 95% variance threshold. 
 
 
 
