@@ -1,0 +1,23 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+* Question 1
+
+** Importing necessary library
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(tibble)
+library(magrittr)
+```
+
+First, the dataset is imported into the notebook.
+
+```{r}
+
+```
+
