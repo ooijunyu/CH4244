@@ -8,14 +8,8 @@ output: html_notebook
 ** Importing necessary library
 
 ```{r}
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(tibble)
-library(magrittr)
-library(readr)
+library(tidyverse)
 library(car)
-install.packages("car")
 ```
 
 First, the data set is imported into the notebook.
