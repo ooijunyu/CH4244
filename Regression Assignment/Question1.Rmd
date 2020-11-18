@@ -13,11 +13,109 @@ library(tidyr)
 library(ggplot2)
 library(tibble)
 library(magrittr)
+library(readr)
+library(car)
+install.packages("car")
 ```
 
-First, the dataset is imported into the notebook.
+First, the data set is imported into the notebook.
+
+```{r}
+data <- read_csv("Advertising.csv")
+attach(data)
+```
+
+Then we have a quick inspect in the data set.
+
+```{r}
+str(data)
+summary(data)
+```
+
+Plot a histogram of `Sales`, `TV`, `radio` and `newspaper` individually
+
+```{r}
+par(mfrow = c(2,2))
+hist(TV,breaks = seq(0,300,30))
+hist(radio)
+hist(newspaper)
+hist(Sales)
+?hist
+```
+
+The spread of data in `TV` seems to be even. However, in `radio` and `newspaper`, there are higher frequency of lower value investment with `newspaper` having a more obvious trend. From the histogram, we observed that `Sales` are roughly normally distributed with slight skewed to the right.
+
+Next, we plot scatter plot of `Sales` vs `TV`, `radio`, and `newspaper` individually.
+
+```{r}
+par(mfrow = c(1,3))
+plot(TV, Sales, main = "Sales vs TV")
+plot(radio, Sales, main = "Sales vs radio")
+plot(newspaper, Sales, main = "Sales vs newspaper")
+```
+
+We observed that the predictors are of different scales. Hence we will normalized them and randomly shuffle them.
+
+```{r}
+set.seed(100) # To produce reproducible result
+
+data <- data %>% 
+  select(Sales,TV,radio,newspaper) %>% 
+  mutate(nSales = (Sales - min(Sales))/(max(Sales)-min(Sales)),
+         nTV = (TV - min(TV))/(max(TV)-min(TV)),
+         nRadio = (radio - min(radio))/(max(radio)-min(radio)),
+         nNewspaper = (newspaper - min(newspaper))/(max(newspaper)-min(newspaper)),
+         rand = runif(dim(data)[1]),) %>% 
+  arrange(rand)
+
+head(data)
+```
+
+Then we re-plot the scatter plot of normalized variable.
+
+```{r}
+attach(data)
+par(mfrow = c(1,3))
+plot(nTV, nSales, main = "nSales vs nTV")
+plot(nRadio, nSales, main = "nSales vs nRadio")
+plot(nNewspaper, nSales, main = "nSales vs nNewspaper")
+```
+
+From the scatter plot, we observe that `nSales` is a concave function of `nTV`. Hence, we will try to fir the data with concave function such as $\sqrt{nTV}$. The relationship between `nSales` and `nRadio` is roughly linear observing from the graph while there seems to not have any correlation between `nSales` and `nNewspaper`. We will compute a correlation matrix to find out.
+
+```{r}
+cor(select(data,nSales,nTV,nRadio,nNewspaper))
+```
+
+From the correlation matrix, we can see that `nSales` is highly correlated to `nTV` and `nRadio` with $r = 0.782$ and $r = 0.576$ respectively, while `nSales` is weakly correlated with `nNewspaper` with $r = 0.228$. Do note that the predictors `nRadio` and `nNewspaper` are correlated to each other with $r = 0.354$. Hence, we expect only one of either will make a good predictor. We can run Variance Inflation Factor(VIF) to check for multicollinearity.
 
 ```{r}
 
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
