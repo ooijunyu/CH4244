@@ -10,6 +10,8 @@ output: html_notebook
 ```{r}
 library(tidyverse)
 library(car)
+library(caret)
+library(scatterplot3d)
 ```
 
 First, the data set is imported into the notebook.
@@ -48,48 +50,133 @@ plot(radio, Sales, main = "Sales vs radio")
 plot(newspaper, Sales, main = "Sales vs newspaper")
 ```
 
-We observed that the predictors are of different scales. Hence we will normalized them and randomly shuffle them.
+Now we randomly shuffle the data.
 
 ```{r}
 set.seed(100) # To produce reproducible result
 
 data <- data %>% 
   select(Sales,TV,radio,newspaper) %>% 
-  mutate(nSales = (Sales - min(Sales))/(max(Sales)-min(Sales)),
-         nTV = (TV - min(TV))/(max(TV)-min(TV)),
-         nRadio = (radio - min(radio))/(max(radio)-min(radio)),
-         nNewspaper = (newspaper - min(newspaper))/(max(newspaper)-min(newspaper)),
-         rand = runif(dim(data)[1]),) %>% 
+  mutate(rand = runif(dim(data)[1]),) %>% 
   arrange(rand)
 
 head(data)
 ```
 
-Then we re-plot the scatter plot of normalized variable.
+From the scatter plot, we observe that `Sales` is a concave function of `TV`. Hence, we will try to fit the data with concave function such as $\sqrt{TV}$. The relationship between `Sales` and `Radio` is roughly linear observing from the graph while there seems to not have any correlation between `Sales` and `Newspaper`. We will compute a correlation matrix to find out.
 
 ```{r}
-attach(data)
-par(mfrow = c(1,3))
-plot(nTV, nSales, main = "nSales vs nTV")
-plot(nRadio, nSales, main = "nSales vs nRadio")
-plot(nNewspaper, nSales, main = "nSales vs nNewspaper")
+cor(select(data,-rand))
 ```
 
-From the scatter plot, we observe that `nSales` is a concave function of `nTV`. Hence, we will try to fir the data with concave function such as $\sqrt{nTV}$. The relationship between `nSales` and `nRadio` is roughly linear observing from the graph while there seems to not have any correlation between `nSales` and `nNewspaper`. We will compute a correlation matrix to find out.
+From the correlation matrix, we can see that `Sales` is highly correlated to `TV` and `Radio` with $r = 0.782$ and $r = 0.576$ respectively, while `Sales` is weakly correlated with `Newspaper` with $r = 0.228$. Do note that the predictors `Radio` and `Newspaper` are correlated to each other with $r = 0.354$. Hence, we expect only one of either will make a good predictor.
+
+Now we will use repeated K-fold cross validation (K = 10) and fit with a linear regression $\hat{Sales}=\beta_0+\beta_1\cdot\sqrt{TV}+\beta_2\cdot radio+\beta_3\cdot newspaper$
 
 ```{r}
-cor(select(data,nSales,nTV,nRadio,nNewspaper))
+# First we set training control to repeated K-fold cross validation 
+# with K = 10, and repeats = 3
+train.control <- trainControl(method = "repeatedcv", 
+                              number = 10, repeats = 3)
+
+# Then we train the linear model
+model1 <- train(Sales ~ I(sqrt(TV)) + radio + newspaper, data = data, method = "lm",
+               trControl = train.control)
+
+# Summary of the result
+summary(model1)
+print(model1)
 ```
 
-From the correlation matrix, we can see that `nSales` is highly correlated to `nTV` and `nRadio` with $r = 0.782$ and $r = 0.576$ respectively, while `nSales` is weakly correlated with `nNewspaper` with $r = 0.228$. Do note that the predictors `nRadio` and `nNewspaper` are correlated to each other with $r = 0.354$. Hence, we expect only one of either will make a good predictor. We can run Variance Inflation Factor(VIF) to check for multicollinearity.
+From the statistics we have, $R^2_{adj}=0.9279$ and $F=854.3$ ($p<2.2\times10^{-16}$), this is considered a good model.
+
+However, when we look closely into the t-values of the predictors, we noticed that both `sqrt(TV)` and `radio` are significant with $p<2\times10^{-16}$ while `newspaper` is not significant with $p = 0.914$.
+
+The coefficients of the predictors told us that for every 1 additional unit of `sqrt(TV)` invested, 0.975 unit of `Sales` will be generated; for every 1 additional unit of `radio` invested, 0.195 unit of `Sales` will be generated; for every 1 additional unit of `newspaper` invested, -0.0005 unit of `Sales` will be generated, which is a loss.
+
+Now, we will use Variance Inflation Factor(VIF) to check for multicollinearity.
 
 ```{r}
-
+vif(model1$finalModel)
 ```
 
+From the VIF generated, the $VIF_{\sqrt{TV}}\approx1$, $VIF_{radio}=1.14$ and $VIF_{newspaper}=1.14$ shows that there is some collinearity between the predictors `radio` and `newspaper`.
 
+Next we try to train the model without the predictor `newspaper`.
 
+```{r}
+# Model without newspaper predictor
+model2 <- train(Sales ~ I(sqrt(TV)) + radio, data = data, method = "lm",
+               trControl = train.control)
 
+# Summary of the result
+summary(model2)
+print(model2)
+```
+
+We can see the new model without the predictor `newspaper` has a higher $F=1288$ and $R^2_{adj}=0.9282$, which indicates that this is a slightly better model compared to the model with `newspaper`. We will do an ANOVA test to confirm.
+
+```{r}
+anova(model1$finalModel, model2$finalModel)
+```
+
+However, the ANOVA test has a $p=0.9144$, which means that we cannot reject the null hypothesis that `model1` and `model2` fits the data equally well. There is no sufficient evidence that the model without the `newspaper` feature is significantly better.
+
+Of course, we will check again the VIF of the predictors for any multicollinearity.
+
+```{r}
+vif(model2$finalModel)
+```
+
+We can see both VIF values are approximate equal to 1, which indicates that there are no multicollinearity between the predictors.
+
+Next up, we will plot the residual graphs to inspect how are the residuals distributed.
+
+```{r}
+par(mfrow = c(2,2))
+plot(model2$finalModel)
+```
+
+We can see that the residuals are not randomly distributed across the 0 abline. This indicates that there are some bias going on with current model. We now try out the 3D scatter plot of the raw and predicted data to inspect.
+
+```{r}
+s3d <- scatterplot3d(x = sqrt(TV), y = radio, z = Sales, angle = 30)
+
+# adding in the prediction plane
+s3d$plane3d(model2$finalModel)
+```
+
+We can see that at the extreme value(pure input) of either `radio` or `sqrt(TV)`, the model underestimate the data, while when there is a mixed input from both predictors, the model overestimate the data. It clearly shows that there are some synergy or interaction between the 2 predictors term. Hence, we will fit again a model with interaction term between the 2 predictors.
+
+$\hat{Sales}=\beta_0+\beta_1\cdot\sqrt{TV}+\beta_2\cdot radio+\beta_3\cdot\sqrt{TV}\times radio$
+
+```{r}
+# Model with interaction term
+model3 <- train(Sales ~ I(sqrt(TV)) * radio, data = data, method = "lm",
+               trControl = train.control)
+
+# Summary of the result
+summary(model3)
+print(model3)
+```
+
+We can see that the new model has a $R^2_{adj}=0.993$ and $F=8949$ which is way higher than the previous 2 models. We will do ANOVA test to compare this model with `model2`.
+
+```{r}
+# Comparing with model2
+anova(model2$finalModel, model3$finalModel)
+```
+
+We can see that the $p<2.2\times 10^{-16}$ of the ANOVA test rejects the null hypothesis that `model2` and `model3` fits equally well. Hence, there is evidence that the model with interaction term fits significantly better than then the model without the interaction term.
+
+We can also plot the residual plot to see how the residuals are distributed.
+
+```{r}
+par(mfrow = c(2,2))
+plot(model3$finalModel)
+```
+
+Now we can see that the residuals are roughly randomly distributed across the 0 abline.
 
 
 
