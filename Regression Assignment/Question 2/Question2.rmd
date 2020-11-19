@@ -12,6 +12,7 @@ Necessary library was imported into R.
 ```{r}
 library(tidyverse)
 library(readxl)
+library(caret)
 ```
 
 ## Importing data
@@ -73,7 +74,23 @@ tablePerch <- c(RawSize = dim(filter(data,Species == "Perch"))[1],
 splitSize <- rbind(tableBream, tableRoach, tablePerch)  
 row.names(splitSize) <- c("Bream","Roach","Perch")
 splitSize
+
+TrainingSet <- rbind(BreamTraining, RoachTraining, PerchTraining)
+TestSet <- rbind(BreamTest, RoachTest, PerchTest)
 ```
 
+## Linear regression
+
+The training data will then trained to fit into the linear model as follow:
+
+$Weight = \beta_0 + \beta_1\cdot Height+\beta_2\cdot Width + \beta_3\cdot \mbox{Bream-D} + \beta_4\cdot\mbox{Roach-D}$
+
+```{r}
+model1 <- train(Weight ~ Height + Width + `Bream-D` + `Roach-D`,
+                data = TrainingSet, method = "lm")
+
+summary(model1)
+print(model1)
+```
 
 
