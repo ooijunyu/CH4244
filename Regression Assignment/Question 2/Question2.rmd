@@ -1,0 +1,79 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Question 2
+
+## Necessary library
+
+Necessary library was imported into R.
+
+```{r}
+library(tidyverse)
+library(readxl)
+```
+
+## Importing data
+
+The data will first be imported into R, and observe the summary statistics of the data.
+
+```{r}
+data <- read_excel("Fish Weight-3Only-Random.xlsx")
+attach(data)
+summary(data)
+str(data)
+head(data)
+```
+
+## One-hot coding
+
+Doing one-hot coding for Bream, Roach, and Perch.
+
+```{r}
+data <- data %>% 
+  mutate("Bream-D" = ifelse(Species == "Bream",1,0),
+         "Roach-D" = ifelse(Species == "Roach",1,0),)
+head(data)
+tail(data)
+```
+
+## Spliting data 80-20
+
+The data is split into 80-20 for training-test sets for each `Species`.
+
+```{r}
+BreamTraining <- filter(data, Species == "Bream") %>% 
+  head(dim(.)[1]*0.8)
+BreamTest <- filter(data, Species == "Bream") %>% 
+  tail(dim(.)[1]*0.2)
+
+tableBream <- c(RawSize = dim(filter(data,Species == "Bream"))[1],
+                TrainingSize = dim(BreamTraining)[1],
+                TestSize = dim(BreamTest)[1])
+
+RoachTraining <- filter(data, Species == "Roach") %>% 
+  head(dim(.)[1]*0.8)
+RoachTest <- filter(data, Species == "Roach") %>% 
+  tail(dim(.)[1]*0.2)
+
+tableRoach <- c(RawSize = dim(filter(data,Species == "Roach"))[1],
+                TrainingSize = dim(RoachTraining)[1],
+                TestSize = dim(RoachTest)[1])
+
+PerchTraining <- filter(data, Species == "Perch") %>% 
+  head(dim(.)[1]*0.8)
+PerchTest <- filter(data, Species == "Perch") %>% 
+  tail(dim(.)[1]*0.2)
+
+tablePerch <- c(RawSize = dim(filter(data,Species == "Perch"))[1],
+                TrainingSize = dim(PerchTraining)[1],
+                TestSize = dim(PerchTest)[1])
+
+splitSize <- rbind(tableBream, tableRoach, tablePerch)  
+row.names(splitSize) <- c("Bream","Roach","Perch")
+splitSize
+```
+
+
+
