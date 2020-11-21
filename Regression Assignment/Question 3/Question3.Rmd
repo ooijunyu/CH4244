@@ -13,6 +13,8 @@ library(readxl)
 library(caret)
 library(PerformanceAnalytics)
 library(car)
+library(factoextra)
+library(pls)
 ```
 
 
@@ -120,7 +122,11 @@ Then we subset out the features that are needed. Here we subset the columns `Acc
 
 ```{r}
 data <- data %>% 
-  select(-c(Mfg, Model, Model_Year, org, rand)) # unselect the stated features
+  select(-c(Mfg, Model, Model_Year, org, rand)) %>% # unselect the stated features
+  mutate(invCylinders = 1/Cylinders,
+         invHorsepower = 1/Horsepower,
+         invDisplacement = 1/Displacement,
+         invWeight = 1/Weight)
 ```
 
 ### Training and test set
@@ -143,8 +149,8 @@ testSet <- tail(data, 81)
 Now, we will do our linear fitting with all the variables with the $1/x$ transformation applied to `Horsepower`, `Displacement`, and `Weight`. We will be omitting observations with NaN values.
 
 ```{r}
-model1 <- train(MPG ~ Acceleration + I(1/Cylinders) + I(1/Displacement) +
-                  I(1/Horsepower) + I(1/Weight),
+model1 <- train(MPG ~ Acceleration + invCylinders + invDisplacement +
+                  invHorsepower + invWeight,
                 data = trainingSet,
                 na.action = na.omit,
                 method = "lm")
@@ -159,11 +165,11 @@ Now we will do VIF test and with p-values of the t-statistics to decide which fe
 vif(model1$finalModel)
 ```
 
-We can see that from the VIF test, `1/Cylinders` and `1/Weight` are highly correlated to each other as they has high VIF value. Besides, `1/Displacement` also has a non-significant p-value for the t-statistics, hence we will drop the tern `1/Displacement`.
+We can see that from the VIF test, `invCylinders` and `invWeight` are highly correlated to each other as they has high VIF value. Besides, `invDisplacement` also has a non-significant p-value for the t-statistics, hence we will drop the tern `invDisplacement`.
 
 ```{r}
-model2 <- train(MPG ~ Acceleration + I(1/Cylinders) +
-                  I(1/Horsepower) + I(1/Weight),
+model2 <- train(MPG ~ Acceleration + invCylinders +
+                  invHorsepower + invWeight,
                 data = trainingSet,
                 na.action = na.omit,
                 method = "lm")
@@ -172,13 +178,13 @@ model2
 summary(model2)
 ```
 
-We see that the model performance has increased from $R^2_{adj}=0.7578$ to $R^2_{adj}=0.7584$. We will trun an ANOVA test to see if both model1 and model2 are performing equally well.
+We see that the model performance has increased from $R^2_{adj}=0.7457$ to $R^2_{adj}=0.7465$. We will do an ANOVA test to see if both model1 and model2 are performing equally well.
 
 ```{r}
 anova(model1$finalModel, model2$finalModel)
 ```
 
-The ANOVA test has a $p=0.6297$ implying that we cannot reject the null hypothesis that both model are performing equally well. We do not have sufficient evidence that model2 is performing better than model1 with the training data.
+The ANOVA test has a $p=0.9941$ implying that we cannot reject the null hypothesis that both model are performing equally well. We do not have sufficient evidence that model2 is performing better than model1 with the training data.
 
 Now, we run again VIF test for model2.
 
@@ -186,10 +192,10 @@ Now, we run again VIF test for model2.
 vif(model2$finalModel)
 ```
 
-Through the VIF test, we can see that `1/Horsepower` and `1/Weight` are highly correlated of value greater than 5. We will remove the term `1/Weight` as it has a higher p-values for t-statistics to avoid multi-collinearity problem.
+Through the VIF test, we can see that `invHorsepower` and `invWeight` are highly correlated of value greater than 5. We will remove the term `invWeight` as it has a higher p-values for t-statistics to avoid multi-collinearity problem.
 
 ```{r}
-model3 <- train(MPG ~ Acceleration + I(1/Cylinders) + I(1/Horsepower),
+model3 <- train(MPG ~ Acceleration + invCylinders + invHorsepower,
                 data = trainingSet,
                 na.action = na.omit,
                 method = "lm")
@@ -198,21 +204,23 @@ model3
 summary(model3)
 ```
 
-Now we see that the model3 has a slightly smaller $R^2_{adj}=0.7429$. We will run an ANOVA test to see if model3 performs equally well to model2.
+Now we see that the model3 has a slightly smaller $R^2_{adj}=0.7353$. We will run an ANOVA test to see if model3 performs equally well to model2.
 
 ```{r}
 anova(model2$finalModel, model3$finalModel)
 ```
 
-The ANOVA test has a $p=7.462\times 10^{-6}$ implying that we have sufficient evidence to reject the null hypthesis that model2 and model3 performs equally well. 
+The ANOVA test has a $p=0.0001629<0.005$ implying that we have sufficient evidence to reject the null hypothesis that model2 and model3 performs equally well. 
 
 However, one problem to note that there might be a multi-collinearity problem in model2 observing from the VIF test, which might in turn affects the validity of p-values for the ANOVA test. The slight drop in $R^2_{adj}$ worth the reduction in the multi-collinearity problem. Hence, we will keep model3 as a better model than model2.
 
 Since `Horsepower` is non-linear, we will try to fit `Horsepower` to the 2nd order polynomial instead of $1/x$.
 
 ```{r}
-model4 <- train(MPG ~  Acceleration + I(1/Cylinders) + Horsepower + I(Horsepower^2),
-                data = trainingSet,
+model4 <- trainingSet %>% 
+  mutate(Horsepower2 = Horsepower^2) %>% 
+  train(MPG ~  Acceleration + invCylinders + Horsepower + Horsepower2,
+                data = .,
                 na.action = na.omit,
                 method = "lm")
 
@@ -220,19 +228,13 @@ model4
 summary(model4)
 ```
 
-We can see that it has a slightly higher $p=0.7451$ compared to model3. We will do an ANOVA test to see if model3 and model4 are performing equally well.
+We can see that it has a slightly lower $p=0.7342$ compared to model3. 
 
-```{r}
-anova(model3$finalModel, model4$finalModel)
-```
-
-According to the ANOVA test, with the $p=0.05748$, we have no sufficient evidence to reject the null hypothesis that model3 and model4 perform equally well with 95% confidence interval.
-
-So far model2 has the higher $R^2_{adj}$ but it suffers multi-collinearity problem. Hence, the next model with highest training $R^2_{adj}$ is model4.
+So far model2 has the higher $R^2_{adj}$ but it suffers multi-collinearity problem. Hence, the next model with highest training $R^2_{adj}$ is model3.
 
 ## Regress on test set
 
-Now, we will apply out model on test set and observe their performance. First, we will create the metric reporting function that reports `RMSE`, `R2` and `R2_adj`.
+Now, we will apply our model3 and model4 on test set and observe their performance. Model1 and model2 are not being considered due to multi-collienarity problem. First, we will create the metric reporting function that reports `RMSE`, `R2` and `R2_adj`.
 
 ```{r}
 metric <- function(raw, predict, nPredictor, dp = 5){
@@ -247,20 +249,50 @@ metric <- function(raw, predict, nPredictor, dp = 5){
   colnames(table) <- c("n","SSE","SST","R2","R2adj","RMSE")
   return(table)
 }
-
-view(testSet)
 ```
 
 Now we will apply all 4 models on the test data.
 
 ```{r}
-predictModel1 <- testSet %>% 
-  select(Acceleration, Horsepower, Cylinders, contrasts(Cylinders), Displacement, Weight, contrasts(org)) %>% 
-  predict(model1$finalModel, .)
+predictModel3 <- na.omit(testSet) %>% 
+  predict(model3, .)
 
+predictModel4 <- na.omit(testSet) %>% 
+  mutate(Horsepower2 = Horsepower^2) %>% 
+  predict(model4, .)
+
+metricModel3 <- metric(na.omit(testSet)$MPG, predictModel3, length(model3$finalModel$coefficients)-1)
+metricModel4 <- metric(na.omit(testSet)$MPG, predictModel4, length(model4$finalModel$coefficients)-1)
+rbind(metricModel3, metricModel4)
 ```
 
+We can see that both model3 and model4 performs roughly equally well according to the $R^2_{adj}$ generated.
 
+## Principal Component Analysis
 
+We will be doing PCR. First, we will get the Training Set and Test set again, and select only relevant variables.
 
+```{r}
+testSet <- na.omit(select(testSet, Acceleration, Cylinders, Displacement, Horsepower, MPG, Weight))
+trainingSet <- na.omit(select(trainingSet, Acceleration, Cylinders, Displacement, Horsepower, MPG, Weight))
+```
+
+Then we will perform PCA
+
+```{r}
+# PCA SVD method
+pcr <- trainingSet %>% 
+  pcr(MPG ~., data = ., scale = TRUE) 
+                 
+summary(pcr)
+```
+
+According to PCA, with 95% variance, only 2 PCA component is needed, with a cumulative variance percent of 95.25%.
+
+```{r}
+pcrPredict <- predict(pcr, testSet, ncomp = 2)
+metric(testSet$MPG, pcrPredict, length(pcr$coefficients)-1) 
+```
+
+We can see that PCR does not perform as well compared to the linear regression with transformed variable with that significantly smaller $R^2_{adj}$ value.
 

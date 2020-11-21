@@ -239,7 +239,7 @@ get_eig(pca.svd)
 
 # The contribution of each features in each component 
 pca.svd.var <- get_pca_var(pca.svd)
-print(round(pca.spectral.var$contrib,5))
+print(round(pca.svd.var$contrib,5))
 
 # The coefficients of each features in each component
 pca.svd$rotation
