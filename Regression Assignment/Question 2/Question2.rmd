@@ -39,6 +39,36 @@ head(data)
 tail(data)
 ```
 
+## Plotting data
+
+We can plot out the data to observe the pattern behind.
+
+```{r}
+ggplot(data) +
+  geom_point(aes(Height,Width, color = Weight, shape = Species), size = 4)
+```
+
+From the graph, we can see the obvious trend, which is fish with larger `Width` and `Height` has heavier weight. Besides, `Bream` generally clustered separately from the other 2 species at large `Height` value; while the other 2 are somewhat mixed. `Roach` species generally forms a cluster at lesser `Height` and `Width` while `Perch` has greater variation in their `Width` and `Height`. `Roach` tends to have the lowest mean `Weight` among the species.
+
+## Correlation between predictor
+
+Now we will compute the correlation matrix between the numeric predictor for `Weight`
+
+```{r}
+cor(select(data,Weight, Height, Width))
+```
+
+We can see that both numeric predictor `Height` and `Weight` are highly positive correlated. It suggest that normally fish with great `Height` will have great `Width`. We try to combine both `Height` and `Width` into an interaction term $HW = Height\cdot Width$ and see how it correlates to `Weight`.
+
+```{r}
+select(data, Weight, Height, Width) %>% 
+  mutate(HW = Height*Width) %>% 
+  select(Weight, HW) %>% 
+  cor()
+```
+
+We can see that the new interaction term is more positively correlated to `Weight` than `Width` and `Height` alone. Hence, we will try to fit this interaction into the second model to see if it yields higher $R^2_{adj}$.
+
 ## Spliting data 80-20
 
 The data is split into 80-20 for training-test sets for each `Species`.
@@ -81,16 +111,89 @@ TestSet <- rbind(BreamTest, RoachTest, PerchTest)
 
 ## Linear regression
 
-The training data will then trained to fit into the linear model as follow:
+The training data will then trained to fit into 2 linear model as follow:
 
-$Weight = \beta_0 + \beta_1\cdot Height+\beta_2\cdot Width + \beta_3\cdot \mbox{Bream-D} + \beta_4\cdot\mbox{Roach-D}$
+$Weight_1 = \beta_0 + \beta_1\cdot Height+\beta_2\cdot Width + \beta_3\cdot \mbox{Bream-D} + \beta_4\cdot\mbox{Roach-D}$
+
+$Weight_2 = \beta_0 + \beta_1\cdot Height+\beta_2\cdot Width + \beta_3\cdot Height\cdot Width  +\beta_4\cdot \mbox{Bream-D} + \beta_5\cdot\mbox{Roach-D}$
 
 ```{r}
 model1 <- train(Weight ~ Height + Width + `Bream-D` + `Roach-D`,
                 data = TrainingSet, method = "lm")
 
 summary(model1)
-print(model1)
+
+model2 <- train(Weight ~ Height * Width + `Bream-D` + `Roach-D`,
+                data = TrainingSet, method = "lm")
+
+summary(model2)
+
+comparison <- rbind(model1$results, model2$results)
+rownames(comparison) <- c("training1", "training2")
+comparison
 ```
+
+We can see that for the training set, model2 ($R^2=0.9659$, $R^2_{adj}=0.9646$, $RMSE=57.78$) is generally better than model1 ($R^2=0.9453$, $R^2_{adj}=0.9455$, $RMSE=71.69$). We can conduct and ANOVA test to see if there is enought evidence that model2 is a better model based on the training set.
+
+```{r}
+anova(model1$finalModel, model2$finalModel)
+```
+
+We can see that the ANOVA test $p=1.79\times 10^{-9}$, which rejects the null hypothesis that both model performs equally well. There is sufficient evidence that `model2` performs significantly better than `model1`.
+
+## Test model
+
+Now we can use both trained `model1` and `model2` on our `TestSet`.
+
+```{r}
+predict1 <- predict(model1, select(TestSet,-Species))
+predict2 <- predict(model2, select(TestSet,-Species))
+predict1
+```
+
+Now we can create a function for metric reporting that report metrics such as $R^2$, $R^2_{Adj}$ and $RMSE$ as there is no built in metric reporting for prediction of data.
+
+```{r}
+metric <- function(raw, predict, nPredictor, dp = 5){
+  n <- length(predict)
+  SSE <- sum((raw - predict) ^ 2)
+  SST <- sum((raw - (sum(raw)/n)) ^ 2)
+  R2 <- 1 - SSE/SST
+  R2adj <- 1 - (((1 - R2)*(n - 1))/(n - nPredictor - 1))
+  RMSE <- sqrt(SSE/n)
+  table <- data.frame(cbind(n, round(SSE,dp), round(SST,dp), round(R2,dp),
+             round(R2adj,dp), round(RMSE,dp)))
+  colnames(table) <- c("n","SSE","SST","R2","R2adj","RMSE")
+  return(table)
+}
+```
+
+Now, we can do the metric reporting.
+
+```{r}
+testMetric1 <- metric(select(TestSet,Weight), predict1, length(model1$finalModel$coefficients)-1)
+testMetric2 <- metric(select(TestSet,Weight), predict2, length(model2$finalModel$coefficients)-1)
+
+trainMetric1 <- predict(model1, select(TrainingSet, -Species)) %>% 
+  metric(select(TrainingSet,Weight), ., length(model1$finalModel$coefficients)-1)
+
+trainMetric2 <- predict(model2, select(TrainingSet, -Species)) %>% 
+  metric(select(TrainingSet,Weight), ., length(model2$finalModel$coefficients)-1)
+
+options(scipen = 999) # to turn of the scientific notation
+
+allMetric <- rbind(trainMetric1, trainMetric2, testMetric1, testMetric2)
+rownames(allMetric) <- c("train1","train2","test1","test2")
+allMetric
+```
+
+We can see that for both mode, the test set has a slightly lower $R^2_{adj}$ and $RMSE$ compared to the training set.
+
+## Not randomized data
+
+If the data is sorted according to weight and is not randomized at the beginning (by Prof. in this case), the model trained will biased towards the group with smaller weight (80th percentile) if first 80% is taken as training set. As a result, the model trained might have a low Training $RMSE$ and high Training $R^2_{adj}$ but high Test $RMSE$ and low Test $R^2_{adj}$. The data selected in this case does not take into account the variation of data for fishes with larger weight and in fact, linear regression is good for interpolation but not good for extrapolation.  
+
+
+
 
 
