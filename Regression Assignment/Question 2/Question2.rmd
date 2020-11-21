@@ -133,13 +133,13 @@ rownames(comparison) <- c("training1", "training2")
 comparison
 ```
 
-We can see that for the training set, model2 ($R^2=0.9659$, $R^2_{adj}=0.9646$, $RMSE=57.78$) is generally better than model1 ($R^2=0.9453$, $R^2_{adj}=0.9455$, $RMSE=71.69$). We can conduct and ANOVA test to see if there is enought evidence that model2 is a better model based on the training set.
+We can see that for the training set, model2 ($R^2=0.9659$, $R^2_{adj}=0.9646$, $RMSE=57.78$) is generally better than model1 ($R^2=0.9453$, $R^2_{adj}=0.9455$, $RMSE=71.69$). We can conduct and ANOVA test to see if there is enough evidence that model2 is a different model based on the training set.
 
 ```{r}
 anova(model1$finalModel, model2$finalModel)
 ```
 
-We can see that the ANOVA test $p=1.79\times 10^{-9}$, which rejects the null hypothesis that both model performs equally well. There is sufficient evidence that `model2` performs significantly better than `model1`.
+We can see that the ANOVA test $p=1.79\times 10^{-9}$, which rejects the null hypothesis that both model performs equally well. There is sufficient evidence that `model2` performs significantly different than `model1`.
 
 ## Test model
 

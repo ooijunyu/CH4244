@@ -1,0 +1,266 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Question 3
+
+## Import library
+
+```{r}
+library(tidyverse)
+library(readxl)
+library(caret)
+library(PerformanceAnalytics)
+library(car)
+```
+
+
+## Data Import
+
+First, let us import the data.
+
+```{r}
+data <- read_csv("CarBig.csv")
+```
+
+## Data Exploration
+
+We will first have a glimpse on the data
+
+```{r}
+dim(data)
+summary(data)
+head(data)
+str(data)
+```
+
+This data set has 13 variables. First, we can convert the categorical data to factors for easier manipulation later and determine the variables that are unnecessary.
+
+```{r}
+data$cyl4 <- as.factor(data$cyl4)
+data$Mfg <- as.factor(data$Mfg)
+data$Origin <- as.factor(data$Origin)
+data$org <- as.factor(data$org)
+data$when <- as.factor(data$when)
+data$Model_Year <- as.factor(data$Model_Year)
+```
+
+Then we re-inspect the data.
+
+```{r}
+str(data)
+```
+
+We can see that `cyl4` is just another presentation of variable `Cylinders` stating whether its 4 cylinder, hence we do not need the variable `cyl4`. Next, we see that `org` and `Origin` are virtually describing the same variable. Hence, we keep the variable `org` instead of `Origin` as we want the European countries to be represented under the factor `Europe`. We will drop `when` variable too as it only describe when in the year the car is released.
+
+```{r}
+data <- select(data, -c(cyl4, Origin, when))
+str(data)
+```
+
+We will do some quick exploratory plotting on the numerical data.
+
+```{r}
+select(data, Acceleration, Displacement, Horsepower, MPG, Weight, Cylinders) %>% 
+  chart.Correlation(histogram = TRUE, pch = 19)
+```
+
+We can see that the `Acceleration` is more or less normally distributed while `Displacement`, `Horsepower`, `MPG`, and `Weight` are roughly log-normally distributed. All the correlation marked with 3 stars has a $p<=0.001$. Since are variables are highly correlated (except MPG-Acceleration and MPG-Weight pairs which are moderately positively correlated) with each other, we will do an VIF test to see if there are any multicollinearity problem occurs within the predictors later.
+
+We will now do some plotting to see how the categorical data fits in the scatter plot.
+
+```{r}
+ggplot(data)+
+  geom_point(aes(x = Acceleration, y = MPG, color = Weight, size = Horsepower))
+
+```
+
+From the plot, we can see that usually cars with higher `Weight` have lower `MPG` and `Acceleration` probably due to more fuel and force is needed to carry the higher weight. 
+
+```{r}
+ggplot(data)+
+  geom_point(aes(x = Horsepower, y = MPG, color = Cylinders))
+```
+
+Now from this plot, we can see that cars with more `Cylinders` tends to have more `Horsepower`, which makes sense and lower `MPG`. This might due to the increase in weight causing more insufficient consumption of fuel.
+
+Next, we are interested to see how `MPG`, `Horsepower`, `Weight` and `org` is correlated to each other. We are interested to see country from which origin has the highest miles-per-gallon and horsepower.
+
+```{r}
+ggplot(data)+
+  geom_point(aes(x = Horsepower, y = MPG, size = Weight, color = org))
+```
+
+We can see that most cars from Europe and Japan has smaller weight, greater `MPG` and lesser `Horsepower`. The small weight inferred that the car is more compact, less cylinders in the engine which leads to lower `Horsepower` but greater performance in terns of fuel saving `MPG`.
+
+## Data transformation while doing linear fitting
+
+```{r}
+select(data, Acceleration, Displacement, Horsepower, MPG, Weight, Cylinders) %>% 
+  chart.Correlation(histogram = TRUE, pch = 19)
+```
+
+Observing from this graph and having `MPG` as our output, we can do some transformation to the features. We see that `Displacement`, `Horsepower`, `Weight` and `Cylinders` are inversely proportional to `MPG`, hence we will do a $1/x$ transformation to these features. However, due to the nature that `Displacement`, `Horsepower`, `Weight` and `Cylinders` are highly correlated, we expect that only one is needed in the end. We will do ANOVA test to compare model fitting. The categorical variables `Model`, `Mfg` and `Model_Year` of the car are not needed in the linear regression as they are already shown to reflect their effect through the numerical variable as shown in previous exploratory analysis.
+
+### Data radomizing
+
+First, we will shuffle our data so that the data is not sorted in any patterns.
+
+```{r}
+set.seed(100)
+data <- data %>% 
+  mutate(rand = runif(dim(data)[1])) %>% 
+  arrange(rand)
+
+head(data)
+```
+
+Then we subset out the features that are needed. Here we subset the columns `Acceleration`, `Cylinders`, `Displacement`, `Horsepower`, `MPG`, and `Weight`.
+
+```{r}
+data <- data %>% 
+  select(-c(Mfg, Model, Model_Year, org, rand)) # unselect the stated features
+```
+
+### Training and test set
+
+Next, we split our data into 80% training set and 20% test set.
+
+```{r}
+dim(data)
+```
+
+As we can see, there are 406 observations. Hence, we will select top 325(~80%) out of the randomized data as training set and the remaining (81) as test set.
+
+```{r}
+trainingSet <- head(data, 325)
+testSet <- tail(data, 81)
+```
+
+### Linear fitting
+
+Now, we will do our linear fitting with all the variables with the $1/x$ transformation applied to `Horsepower`, `Displacement`, and `Weight`. We will be omitting observations with NaN values.
+
+```{r}
+model1 <- train(MPG ~ Acceleration + I(1/Cylinders) + I(1/Displacement) +
+                  I(1/Horsepower) + I(1/Weight),
+                data = trainingSet,
+                na.action = na.omit,
+                method = "lm")
+
+model1
+summary(model1)
+```
+
+Now we will do VIF test and with p-values of the t-statistics to decide which features to drop.
+
+```{r}
+vif(model1$finalModel)
+```
+
+We can see that from the VIF test, `1/Cylinders` and `1/Weight` are highly correlated to each other as they has high VIF value. Besides, `1/Displacement` also has a non-significant p-value for the t-statistics, hence we will drop the tern `1/Displacement`.
+
+```{r}
+model2 <- train(MPG ~ Acceleration + I(1/Cylinders) +
+                  I(1/Horsepower) + I(1/Weight),
+                data = trainingSet,
+                na.action = na.omit,
+                method = "lm")
+
+model2
+summary(model2)
+```
+
+We see that the model performance has increased from $R^2_{adj}=0.7578$ to $R^2_{adj}=0.7584$. We will trun an ANOVA test to see if both model1 and model2 are performing equally well.
+
+```{r}
+anova(model1$finalModel, model2$finalModel)
+```
+
+The ANOVA test has a $p=0.6297$ implying that we cannot reject the null hypothesis that both model are performing equally well. We do not have sufficient evidence that model2 is performing better than model1 with the training data.
+
+Now, we run again VIF test for model2.
+
+```{r}
+vif(model2$finalModel)
+```
+
+Through the VIF test, we can see that `1/Horsepower` and `1/Weight` are highly correlated of value greater than 5. We will remove the term `1/Weight` as it has a higher p-values for t-statistics to avoid multi-collinearity problem.
+
+```{r}
+model3 <- train(MPG ~ Acceleration + I(1/Cylinders) + I(1/Horsepower),
+                data = trainingSet,
+                na.action = na.omit,
+                method = "lm")
+
+model3
+summary(model3)
+```
+
+Now we see that the model3 has a slightly smaller $R^2_{adj}=0.7429$. We will run an ANOVA test to see if model3 performs equally well to model2.
+
+```{r}
+anova(model2$finalModel, model3$finalModel)
+```
+
+The ANOVA test has a $p=7.462\times 10^{-6}$ implying that we have sufficient evidence to reject the null hypthesis that model2 and model3 performs equally well. 
+
+However, one problem to note that there might be a multi-collinearity problem in model2 observing from the VIF test, which might in turn affects the validity of p-values for the ANOVA test. The slight drop in $R^2_{adj}$ worth the reduction in the multi-collinearity problem. Hence, we will keep model3 as a better model than model2.
+
+Since `Horsepower` is non-linear, we will try to fit `Horsepower` to the 2nd order polynomial instead of $1/x$.
+
+```{r}
+model4 <- train(MPG ~  Acceleration + I(1/Cylinders) + Horsepower + I(Horsepower^2),
+                data = trainingSet,
+                na.action = na.omit,
+                method = "lm")
+
+model4
+summary(model4)
+```
+
+We can see that it has a slightly higher $p=0.7451$ compared to model3. We will do an ANOVA test to see if model3 and model4 are performing equally well.
+
+```{r}
+anova(model3$finalModel, model4$finalModel)
+```
+
+According to the ANOVA test, with the $p=0.05748$, we have no sufficient evidence to reject the null hypothesis that model3 and model4 perform equally well with 95% confidence interval.
+
+So far model2 has the higher $R^2_{adj}$ but it suffers multi-collinearity problem. Hence, the next model with highest training $R^2_{adj}$ is model4.
+
+## Regress on test set
+
+Now, we will apply out model on test set and observe their performance. First, we will create the metric reporting function that reports `RMSE`, `R2` and `R2_adj`.
+
+```{r}
+metric <- function(raw, predict, nPredictor, dp = 5){
+  n <- length(predict)
+  SSE <- sum((raw - predict) ^ 2)
+  SST <- sum((raw - (sum(raw)/n)) ^ 2)
+  R2 <- 1 - SSE/SST
+  R2adj <- 1 - (((1 - R2)*(n - 1))/(n - nPredictor - 1))
+  RMSE <- sqrt(SSE/n)
+  table <- data.frame(cbind(n, round(SSE,dp), round(SST,dp), round(R2,dp),
+             round(R2adj,dp), round(RMSE,dp)))
+  colnames(table) <- c("n","SSE","SST","R2","R2adj","RMSE")
+  return(table)
+}
+
+view(testSet)
+```
+
+Now we will apply all 4 models on the test data.
+
+```{r}
+predictModel1 <- testSet %>% 
+  select(Acceleration, Horsepower, Cylinders, contrasts(Cylinders), Displacement, Weight, contrasts(org)) %>% 
+  predict(model1$finalModel, .)
+
+```
+
+
+
+
+
