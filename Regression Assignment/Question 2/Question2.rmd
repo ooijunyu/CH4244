@@ -113,9 +113,9 @@ TestSet <- rbind(BreamTest, RoachTest, PerchTest)
 
 The training data will then trained to fit into 2 linear model as follow:
 
-$Weight_1 = \beta_0 + \beta_1\cdot Height+\beta_2\cdot Width + \beta_3\cdot \mbox{Bream-D} + \beta_4\cdot\mbox{Roach-D}$
+$\hat{Weight_1} = \hat{\beta_0} + \hat{\beta_1}\cdot Height + \hat{\beta_2}\cdot Width + \hat{\beta_3}\cdot \mbox{Bream-D} + \hat{\beta_4}\cdot\mbox{Roach-D}$
 
-$Weight_2 = \beta_0 + \beta_1\cdot Height+\beta_2\cdot Width + \beta_3\cdot Height\cdot Width  +\beta_4\cdot \mbox{Bream-D} + \beta_5\cdot\mbox{Roach-D}$
+$\hat{Weight_2} = \hat{\beta_0} + \hat{\beta_1}\cdot Height + \hat{\beta_2}\cdot Width + \hat{\beta_3}\cdot Height\cdot Width + \hat{\beta_4}\cdot \mbox{Bream-D} + \hat{\beta_5}\cdot\mbox{Roach-D}$
 
 ```{r}
 model1 <- train(Weight ~ Height + Width + `Bream-D` + `Roach-D`,
