@@ -148,6 +148,8 @@ testSet <- tail(data, 81)
 
 Now, we will do our linear fitting with all the variables with the $1/x$ transformation applied to `Horsepower`, `Displacement`, and `Weight`. We will be omitting observations with NaN values.
 
+$\hat{MPG_1}=\hat{\beta_0}+\hat{\beta_1}\cdot Acceleration + \hat{\beta_2}\cdot \frac{1}{Cylinders} +\hat{\beta_3}\cdot\frac{1}{Displacement} +\hat{\beta_4}\cdot \frac{1}{Horsepower} + \hat{\beta_5}\cdot \frac{1}{Weight}$
+
 ```{r}
 model1 <- train(MPG ~ Acceleration + invCylinders + invDisplacement +
                   invHorsepower + invWeight,
@@ -166,6 +168,8 @@ vif(model1$finalModel)
 ```
 
 We can see that from the VIF test, `invCylinders` and `invWeight` are highly correlated to each other as they has high VIF value. Besides, `invDisplacement` also has a non-significant p-value for the t-statistics, hence we will drop the tern `invDisplacement`.
+
+$\hat{MPG_2}=\hat{\beta_0}+\hat{\beta_1}\cdot Acceleration + \hat{\beta_2}\cdot \frac{1}{Cylinders} + \hat{\beta_3}\cdot \frac{1}{Horsepower} + \hat{\beta_4}\cdot \frac{1}{Weight}$
 
 ```{r}
 model2 <- train(MPG ~ Acceleration + invCylinders +
@@ -194,6 +198,8 @@ vif(model2$finalModel)
 
 Through the VIF test, we can see that `invHorsepower` and `invWeight` are highly correlated of value greater than 5. We will remove the term `invWeight` as it has a higher p-values for t-statistics to avoid multi-collinearity problem.
 
+$\hat{MPG_3}=\hat{\beta_0}+\hat{\beta_1}\cdot Acceleration + \hat{\beta_2}\cdot \frac{1}{Cylinders} + \hat{\beta_3}\cdot \frac{1}{Horsepower}$
+
 ```{r}
 model3 <- train(MPG ~ Acceleration + invCylinders + invHorsepower,
                 data = trainingSet,
@@ -215,6 +221,8 @@ The ANOVA test has a $p=0.0001629<0.005$ implying that we have sufficient eviden
 However, one problem to note that there might be a multi-collinearity problem in model2 observing from the VIF test, which might in turn affects the validity of p-values for the ANOVA test. The slight drop in $R^2_{adj}$ worth the reduction in the multi-collinearity problem. Hence, we will keep model3 as a better model than model2.
 
 Since `Horsepower` is non-linear, we will try to fit `Horsepower` to the 2nd order polynomial instead of $1/x$.
+
+$\hat{MPG_4}=\hat{\beta_0}+\hat{\beta_1}\cdot Acceleration + \hat{\beta_2}\cdot \frac{1}{Cylinders} + \hat{\beta_3}\cdot Horsepower + \hat{\beta_4}\cdot Horsepower^2$
 
 ```{r}
 model4 <- trainingSet %>% 
@@ -273,26 +281,69 @@ We can see that both model3 and model4 performs roughly equally well according t
 We will be doing PCR. First, we will get the Training Set and Test set again, and select only relevant variables.
 
 ```{r}
-testSet <- na.omit(select(testSet, Acceleration, Cylinders, Displacement, Horsepower, MPG, Weight))
-trainingSet <- na.omit(select(trainingSet, Acceleration, Cylinders, Displacement, Horsepower, MPG, Weight))
+testSet <- na.omit(testSet)
+trainingSet <- na.omit(trainingSet)
 ```
 
 Then we will perform PCA
 
 ```{r}
-# PCA SVD method
-pcr <- trainingSet %>% 
+pcr1 <- trainingSet %>% 
+  select(Acceleration, Cylinders, Displacement, Horsepower, MPG, Weight) %>% 
   pcr(MPG ~., data = ., scale = TRUE) 
                  
-summary(pcr)
+summary(pcr1)
 ```
 
 According to PCA, with 95% variance, only 2 PCA component is needed, with a cumulative variance percent of 95.25%.
 
 ```{r}
-pcrPredict <- predict(pcr, testSet, ncomp = 2)
-metric(testSet$MPG, pcrPredict, length(pcr$coefficients)-1) 
+pcrPredict1 <- predict(pcr1, testSet, ncomp = 2)
+metric(testSet$MPG, pcrPredict1, length(pcr1$coefficients)-1) 
 ```
 
-We can see that PCR does not perform as well compared to the linear regression with transformed variable with that significantly smaller $R^2_{adj}$ value.
+We can see that PCR without the transformed variables does not perform as well compared to the linear regression with transformed variable with that significantly smaller $R^2_{adj}$ value.
+
+### PCR with transformed variable
+
+Since PCR does not work well if the variables are not linear, we will try again PCR with the linearly transformed variables: `invWeight`, `invCylinders`, `invHorsepower`, and `invDisplacement`.
+
+```{r}
+pcr2 <- trainingSet %>% 
+  select(Acceleration, invCylinders, invDisplacement, invHorsepower, MPG, invWeight) %>% 
+  pcr(MPG ~., data = ., scale = TRUE) 
+                 
+summary(pcr2)
+```
+
+With the inverse variables, we can see that with a threshold variance of 95%, 3 components must be chosen with a accumulated 97.49% of variance explained.
+
+```{r}
+pcrPredict2 <- predict(pcr2, testSet, ncomp = 3)
+metric(testSet$MPG, pcrPredict2, length(pcr2$coefficients)-1) 
+```
+
+From the metric generated, we can see that PCR with transformed variable performed better than PCR without transformed variable. This is probably due to the fact that the transformed variables are more closed to linear variable and the PCA algorithm we work with works on linear variable.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
