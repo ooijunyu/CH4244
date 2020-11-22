@@ -85,7 +85,9 @@ From the correlation matrix, we can see that `Sales` is highly correlated to `TV
 
 ### All predictors
 
-Now we will use repeated K-fold cross validation (K = 10) and fit with a linear regression $\hat{Sales}=\beta_0+\beta_1\cdot\sqrt{TV}+\beta_2\cdot radio+\beta_3\cdot newspaper$
+Now we will use repeated K-fold cross validation (K = 10) and fit with a linear regression 
+
+$\hat{Sales} = \hat{\beta_0} + \hat{\beta_1}\cdot\sqrt{TV} + \hat{\beta_2}\cdot radio + \hat{\beta_3}\cdot newspaper$
 
 ```{r}
 # First we set training control to repeated K-fold cross validation 
@@ -119,6 +121,8 @@ From the VIF generated, the $VIF_{\sqrt{TV}}\approx1$, $VIF_{radio}=1.14$ and $V
 ### Without newspaper
 
 Next we try to train the model without the predictor `newspaper`.
+
+$\hat{Sales} = \hat{\beta_0} + \hat{\beta_1}\cdot\sqrt{TV} + \hat{\beta_2}\cdot radio$
 
 ```{r}
 # Model without newspaper predictor
@@ -166,7 +170,7 @@ We can see that at the extreme value(pure input) of either `radio` or `sqrt(TV)`
 
 ### Adding interaction variables
 
-$\hat{Sales}=\beta_0+\beta_1\cdot\sqrt{TV}+\beta_2\cdot radio+\beta_3\cdot\sqrt{TV}\times radio$
+$\hat{Sales} = \hat{\beta_0} + \hat{\beta_1}\cdot\sqrt{TV} + \hat{\beta_2}\cdot radio + \hat{\beta_3}\cdot\sqrt{TV}\times radio$
 
 ```{r}
 # Model with interaction term
